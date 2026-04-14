@@ -1,0 +1,286 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>火柴人格斗</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      background: #1b1f24;
+      color: #f8fafc;
+    }
+
+    .container {
+      width: min(960px, 95vw);
+    }
+
+    .hud {
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      gap: 12px;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+
+    .bar-wrap {
+      background: #111827;
+      border: 2px solid #475569;
+      border-radius: 10px;
+      height: 24px;
+      overflow: hidden;
+    }
+
+    .bar {
+      height: 100%;
+      width: 100%;
+      transition: width 120ms linear;
+    }
+
+    .p1 { background: linear-gradient(90deg, #22c55e, #16a34a); }
+    .p2 { background: linear-gradient(90deg, #ef4444, #dc2626); }
+
+    .status {
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      text-align: center;
+      min-width: 190px;
+    }
+
+    canvas {
+      width: 100%;
+      aspect-ratio: 16/9;
+      border: 3px solid #64748b;
+      border-radius: 14px;
+      background: linear-gradient(#0b1020, #12243f 60%, #1f2937 60%);
+      display: block;
+    }
+
+    .tips {
+      margin-top: 10px;
+      font-size: 14px;
+      color: #cbd5e1;
+      line-height: 1.7;
+    }
+
+    .kbd {
+      display: inline-block;
+      border: 1px solid #64748b;
+      border-bottom-width: 3px;
+      border-radius: 6px;
+      padding: 1px 6px;
+      margin-inline: 2px;
+      background: #0f172a;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 12px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="hud">
+      <div class="bar-wrap"><div id="bar1" class="bar p1"></div></div>
+      <div id="status" class="status">对战中</div>
+      <div class="bar-wrap"><div id="bar2" class="bar p2"></div></div>
+    </div>
+
+    <canvas id="game" width="960" height="540"></canvas>
+
+    <div class="tips">
+      玩家1：<span class="kbd">A</span>/<span class="kbd">D</span> 移动，<span class="kbd">W</span> 攻击。<br />
+      玩家2：<span class="kbd">←</span>/<span class="kbd">→</span> 移动，<span class="kbd">↑</span> 攻击。<br />
+      双方初始血量 100，每次攻击命中扣 10。先把对方打到 0 或负数者获胜。
+    </div>
+  </div>
+
+  <script>
+    const canvas = document.getElementById("game");
+    const ctx = canvas.getContext("2d");
+    const bar1 = document.getElementById("bar1");
+    const bar2 = document.getElementById("bar2");
+    const statusText = document.getElementById("status");
+
+    const keys = new Set();
+
+    const createPlayer = (x, color, controls, facing) => ({
+      x,
+      y: 430,
+      width: 28,
+      height: 100,
+      speed: 5,
+      hp: 100,
+      color,
+      controls,
+      facing,
+      armSwing: 0,
+      attackUntil: 0,
+      lastAttack: 0,
+      name: color === "#22c55e" ? "玩家1" : "玩家2",
+    });
+
+    const p1 = createPlayer(200, "#22c55e", { left: "KeyA", right: "KeyD", attack: "KeyW" }, 1);
+    const p2 = createPlayer(760, "#ef4444", { left: "ArrowLeft", right: "ArrowRight", attack: "ArrowUp" }, -1);
+
+    const ATTACK_RANGE = 70;
+    const ATTACK_COOLDOWN = 380;
+    const ATTACK_ACTIVE_MS = 140;
+    let winner = null;
+
+    function hitTarget(attacker, defender) {
+      const now = performance.now();
+      if (now - attacker.lastAttack < ATTACK_COOLDOWN || winner) return;
+
+      attacker.lastAttack = now;
+      attacker.attackUntil = now + ATTACK_ACTIVE_MS;
+      attacker.armSwing = 18;
+
+      const dx = Math.abs((attacker.x + attacker.width / 2) - (defender.x + defender.width / 2));
+      const sameLane = Math.abs(attacker.y - defender.y) < 10;
+
+      if (dx <= ATTACK_RANGE && sameLane) {
+        defender.hp -= 10;
+        updateBars();
+
+        if (defender.hp <= 0) {
+          winner = attacker;
+          statusText.textContent = `${attacker.name} 获胜！`;
+        }
+      }
+    }
+
+    function updateBars() {
+      bar1.style.width = `${Math.max(0, p1.hp)}%`;
+      bar2.style.width = `${Math.max(0, p2.hp)}%`;
+
+      if (!winner) {
+        statusText.textContent = `玩家1: ${p1.hp} HP  |  玩家2: ${p2.hp} HP`;
+      }
+    }
+
+    function updatePlayer(player, opponent) {
+      if (winner) return;
+
+      if (keys.has(player.controls.left)) {
+        player.x -= player.speed;
+        player.facing = -1;
+      }
+      if (keys.has(player.controls.right)) {
+        player.x += player.speed;
+        player.facing = 1;
+      }
+
+      player.x = Math.max(20, Math.min(canvas.width - 20 - player.width, player.x));
+
+      if (keys.has(player.controls.attack)) {
+        hitTarget(player, opponent);
+      }
+
+      if (player.armSwing > 0) {
+        player.armSwing -= 2;
+      }
+    }
+
+    function drawStickman(player) {
+      const x = player.x;
+      const y = player.y;
+      const headR = 13;
+      const torsoTop = y - player.height + 28;
+      const torsoBottom = y - 26;
+      const centerX = x + player.width / 2;
+      const attackPose = performance.now() < player.attackUntil;
+
+      ctx.strokeStyle = player.color;
+      ctx.lineWidth = 5;
+      ctx.lineCap = "round";
+
+      // Head
+      ctx.beginPath();
+      ctx.arc(centerX, torsoTop - 18, headR, 0, Math.PI * 2);
+      ctx.stroke();
+
+      // Body
+      ctx.beginPath();
+      ctx.moveTo(centerX, torsoTop);
+      ctx.lineTo(centerX, torsoBottom);
+      ctx.stroke();
+
+      // Arms
+      ctx.beginPath();
+      ctx.moveTo(centerX, torsoTop + 18);
+      ctx.lineTo(centerX - 24, torsoTop + 28);
+      ctx.moveTo(centerX, torsoTop + 18);
+      const armX = attackPose ? centerX + player.facing * 42 : centerX + 24;
+      const armY = attackPose ? torsoTop + 14 : torsoTop + 28;
+      ctx.lineTo(armX, armY);
+      ctx.stroke();
+
+      // Legs
+      ctx.beginPath();
+      ctx.moveTo(centerX, torsoBottom);
+      ctx.lineTo(centerX - 20, y);
+      ctx.moveTo(centerX, torsoBottom);
+      ctx.lineTo(centerX + 20, y);
+      ctx.stroke();
+    }
+
+    function drawGround() {
+      ctx.fillStyle = "#334155";
+      ctx.fillRect(0, 430, canvas.width, 110);
+      ctx.fillStyle = "rgba(255,255,255,0.08)";
+      for (let i = 0; i < canvas.width; i += 45) {
+        ctx.fillRect(i, 490, 24, 3);
+      }
+    }
+
+    function drawWinOverlay() {
+      if (!winner) return;
+
+      ctx.fillStyle = "rgba(15, 23, 42, 0.65)";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      ctx.fillStyle = "#f8fafc";
+      ctx.font = "bold 54px 'Segoe UI', sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText(`${winner.name} 胜利`, canvas.width / 2, canvas.height / 2 - 20);
+
+      ctx.font = "24px 'Segoe UI', sans-serif";
+      ctx.fillText("按 F5 刷新重新开始", canvas.width / 2, canvas.height / 2 + 26);
+    }
+
+    function loop() {
+      updatePlayer(p1, p2);
+      updatePlayer(p2, p1);
+
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      drawGround();
+      drawStickman(p1);
+      drawStickman(p2);
+      drawWinOverlay();
+
+      requestAnimationFrame(loop);
+    }
+
+    window.addEventListener("keydown", (e) => {
+      keys.add(e.code);
+      if (["ArrowUp", "ArrowLeft", "ArrowRight", "Space"].includes(e.code)) {
+        e.preventDefault();
+      }
+    });
+
+    window.addEventListener("keyup", (e) => {
+      keys.delete(e.code);
+    });
+
+    updateBars();
+    loop();
+  </script>
+</body>
+</html>
