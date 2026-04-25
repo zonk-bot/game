@@ -3,284 +3,449 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>火柴人格斗</title>
+  <title>双人围棋对战</title>
   <style>
     :root {
-      color-scheme: light dark;
+      color-scheme: dark;
       font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
     }
+
+    * { box-sizing: border-box; }
 
     body {
       margin: 0;
       min-height: 100vh;
       display: grid;
       place-items: center;
-      background: #1b1f24;
-      color: #f8fafc;
+      background: #0f172a;
+      color: #e2e8f0;
+      padding: 16px;
     }
 
-    .container {
-      width: min(960px, 95vw);
-    }
-
-    .hud {
+    .app {
+      width: min(1100px, 98vw);
       display: grid;
-      grid-template-columns: 1fr auto 1fr;
-      gap: 12px;
-      align-items: center;
-      margin-bottom: 10px;
+      grid-template-columns: 1fr 320px;
+      gap: 16px;
+      align-items: start;
     }
 
-    .bar-wrap {
+    .board-wrap {
       background: #111827;
-      border: 2px solid #475569;
-      border-radius: 10px;
-      height: 24px;
-      overflow: hidden;
-    }
-
-    .bar {
-      height: 100%;
-      width: 100%;
-      transition: width 120ms linear;
-    }
-
-    .p1 { background: linear-gradient(90deg, #22c55e, #16a34a); }
-    .p2 { background: linear-gradient(90deg, #ef4444, #dc2626); }
-
-    .status {
-      font-weight: 700;
-      letter-spacing: 0.5px;
-      text-align: center;
-      min-width: 190px;
+      border: 2px solid #334155;
+      border-radius: 14px;
+      padding: 14px;
     }
 
     canvas {
       width: 100%;
-      aspect-ratio: 16/9;
-      border: 3px solid #64748b;
-      border-radius: 14px;
-      background: linear-gradient(#0b1020, #12243f 60%, #1f2937 60%);
+      max-height: 84vh;
+      aspect-ratio: 1;
       display: block;
+      background: #d7a35d;
+      border-radius: 10px;
+      cursor: crosshair;
     }
 
-    .tips {
-      margin-top: 10px;
+    .panel {
+      background: #111827;
+      border: 2px solid #334155;
+      border-radius: 14px;
+      padding: 14px;
+      display: grid;
+      gap: 10px;
+    }
+
+    .status {
+      padding: 10px;
+      border-radius: 8px;
+      background: #1e293b;
+      line-height: 1.5;
+      font-size: 15px;
+    }
+
+    .row {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 8px;
+    }
+
+    button {
+      border: 0;
+      border-radius: 8px;
+      padding: 10px 12px;
       font-size: 14px;
-      color: #cbd5e1;
-      line-height: 1.7;
+      font-weight: 700;
+      cursor: pointer;
+      color: #e2e8f0;
+      background: #334155;
     }
 
-    .kbd {
-      display: inline-block;
-      border: 1px solid #64748b;
-      border-bottom-width: 3px;
-      border-radius: 6px;
-      padding: 1px 6px;
-      margin-inline: 2px;
-      background: #0f172a;
+    button:hover { filter: brightness(1.08); }
+    .pass { background: #065f46; }
+    .restart { background: #7c3aed; }
+
+    .log {
+      background: #0b1220;
+      border: 1px solid #334155;
+      border-radius: 8px;
+      padding: 8px;
+      max-height: 280px;
+      overflow: auto;
       font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
       font-size: 12px;
+      line-height: 1.55;
+      white-space: pre-line;
+    }
+
+    .rules {
+      font-size: 13px;
+      color: #cbd5e1;
+      line-height: 1.6;
+      margin: 0;
+      padding-left: 18px;
+    }
+
+    @media (max-width: 980px) {
+      .app { grid-template-columns: 1fr; }
+      .board-wrap { order: 1; }
+      .panel { order: 2; }
     }
   </style>
 </head>
 <body>
-  <div class="container">
-    <div class="hud">
-      <div class="bar-wrap"><div id="bar1" class="bar p1"></div></div>
-      <div id="status" class="status">对战中</div>
-      <div class="bar-wrap"><div id="bar2" class="bar p2"></div></div>
-    </div>
+  <main class="app">
+    <section class="board-wrap">
+      <canvas id="board" width="820" height="820" aria-label="围棋棋盘"></canvas>
+    </section>
 
-    <canvas id="game" width="960" height="540"></canvas>
-
-    <div class="tips">
-      玩家1：<span class="kbd">A</span>/<span class="kbd">D</span> 移动，<span class="kbd">W</span> 攻击。<br />
-      玩家2：<span class="kbd">←</span>/<span class="kbd">→</span> 移动，<span class="kbd">↑</span> 攻击。<br />
-      双方初始血量 100，每次攻击命中扣 10。先把对方打到 0 或负数者获胜。
-    </div>
-  </div>
+    <aside class="panel">
+      <div id="status" class="status">加载中...</div>
+      <div class="row">
+        <button id="passBtn" class="pass">当前玩家停一手（Pass）</button>
+        <button id="restartBtn" class="restart">重新开始</button>
+      </div>
+      <div class="status" id="scoreBox"></div>
+      <div class="log" id="log"></div>
+      <ul class="rules">
+        <li>黑棋先行，落子后若使对方棋块无气，则提走对方棋子。</li>
+        <li>禁止重复局面（Ko / Superko），避免无限劫争循环。</li>
+        <li>不允许自杀棋（除非同时提走对方后产生新气）。</li>
+        <li>连续两次 Pass 后对局结束，按中国数子法计分（子 + 地），白棋贴目 7.5。</li>
+      </ul>
+    </aside>
+  </main>
 
   <script>
-    const canvas = document.getElementById("game");
+    const BOARD_SIZE = 19;
+    const KOMI = 7.5;
+
+    const canvas = document.getElementById("board");
     const ctx = canvas.getContext("2d");
-    const bar1 = document.getElementById("bar1");
-    const bar2 = document.getElementById("bar2");
-    const statusText = document.getElementById("status");
+    const statusEl = document.getElementById("status");
+    const scoreBox = document.getElementById("scoreBox");
+    const logEl = document.getElementById("log");
+    const passBtn = document.getElementById("passBtn");
+    const restartBtn = document.getElementById("restartBtn");
 
-    const keys = new Set();
+    const pad = 40;
+    const grid = (canvas.width - pad * 2) / (BOARD_SIZE - 1);
+    const starPoints = [3, 9, 15];
 
-    const createPlayer = (x, color, controls, facing) => ({
-      x,
-      y: 430,
-      width: 28,
-      height: 100,
-      speed: 5,
-      hp: 100,
-      color,
-      controls,
-      facing,
-      armSwing: 0,
-      attackUntil: 0,
-      lastAttack: 0,
-      name: color === "#22c55e" ? "玩家1" : "玩家2",
-    });
+    let board = Array.from({ length: BOARD_SIZE }, () => Array(BOARD_SIZE).fill(0));
+    let currentPlayer = 1; // 1 black, 2 white
+    let passCount = 0;
+    let gameOver = false;
+    let moveNumber = 1;
+    const history = new Set();
 
-    const p1 = createPlayer(200, "#22c55e", { left: "KeyA", right: "KeyD", attack: "KeyW" }, 1);
-    const p2 = createPlayer(760, "#ef4444", { left: "ArrowLeft", right: "ArrowRight", attack: "ArrowUp" }, -1);
+    function posToText(x, y) {
+      const letters = "ABCDEFGHJKLMNOPQRST";
+      return `${letters[x]}${BOARD_SIZE - y}`;
+    }
 
-    const ATTACK_RANGE = 70;
-    const ATTACK_COOLDOWN = 380;
-    const ATTACK_ACTIVE_MS = 140;
-    let winner = null;
+    function boardHash(arr) {
+      return arr.map(row => row.join("")).join("|");
+    }
 
-    function hitTarget(attacker, defender) {
-      const now = performance.now();
-      if (now - attacker.lastAttack < ATTACK_COOLDOWN || winner) return;
+    function cloneBoard(arr) {
+      return arr.map(row => row.slice());
+    }
 
-      attacker.lastAttack = now;
-      attacker.attackUntil = now + ATTACK_ACTIVE_MS;
-      attacker.armSwing = 18;
+    function inBounds(x, y) {
+      return x >= 0 && x < BOARD_SIZE && y >= 0 && y < BOARD_SIZE;
+    }
 
-      const dx = Math.abs((attacker.x + attacker.width / 2) - (defender.x + defender.width / 2));
-      const sameLane = Math.abs(attacker.y - defender.y) < 10;
+    function neighbors(x, y) {
+      return [
+        [x + 1, y],
+        [x - 1, y],
+        [x, y + 1],
+        [x, y - 1],
+      ].filter(([nx, ny]) => inBounds(nx, ny));
+    }
 
-      if (dx <= ATTACK_RANGE && sameLane) {
-        defender.hp -= 10;
-        updateBars();
+    function collectGroup(arr, sx, sy) {
+      const color = arr[sy][sx];
+      const stack = [[sx, sy]];
+      const stones = [];
+      const seen = new Set([`${sx},${sy}`]);
+      const libertySet = new Set();
 
-        if (defender.hp <= 0) {
-          winner = attacker;
-          statusText.textContent = `${attacker.name} 获胜！`;
+      while (stack.length) {
+        const [x, y] = stack.pop();
+        stones.push([x, y]);
+
+        for (const [nx, ny] of neighbors(x, y)) {
+          const v = arr[ny][nx];
+          if (v === 0) {
+            libertySet.add(`${nx},${ny}`);
+          } else if (v === color) {
+            const key = `${nx},${ny}`;
+            if (!seen.has(key)) {
+              seen.add(key);
+              stack.push([nx, ny]);
+            }
+          }
+        }
+      }
+
+      return { stones, liberties: libertySet.size };
+    }
+
+    function drawBoard() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // wood gradient
+      const g = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
+      g.addColorStop(0, "#e1b979");
+      g.addColorStop(1, "#c6914f");
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      // grid lines
+      ctx.strokeStyle = "#5b3d19";
+      ctx.lineWidth = 1.2;
+      for (let i = 0; i < BOARD_SIZE; i++) {
+        const p = pad + i * grid;
+        ctx.beginPath();
+        ctx.moveTo(pad, p);
+        ctx.lineTo(canvas.width - pad, p);
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.moveTo(p, pad);
+        ctx.lineTo(p, canvas.height - pad);
+        ctx.stroke();
+      }
+
+      // star points
+      ctx.fillStyle = "#5b3d19";
+      for (const x of starPoints) {
+        for (const y of starPoints) {
+          ctx.beginPath();
+          ctx.arc(pad + x * grid, pad + y * grid, 4, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+
+      // stones
+      for (let y = 0; y < BOARD_SIZE; y++) {
+        for (let x = 0; x < BOARD_SIZE; x++) {
+          const v = board[y][x];
+          if (v === 0) continue;
+          const cx = pad + x * grid;
+          const cy = pad + y * grid;
+          const r = grid * 0.45;
+
+          const sg = ctx.createRadialGradient(cx - r * 0.4, cy - r * 0.4, r * 0.2, cx, cy, r);
+          if (v === 1) {
+            sg.addColorStop(0, "#666");
+            sg.addColorStop(1, "#0a0a0a");
+          } else {
+            sg.addColorStop(0, "#fff");
+            sg.addColorStop(1, "#cbd5e1");
+          }
+
+          ctx.fillStyle = sg;
+          ctx.beginPath();
+          ctx.arc(cx, cy, r, 0, Math.PI * 2);
+          ctx.fill();
         }
       }
     }
 
-    function updateBars() {
-      bar1.style.width = `${Math.max(0, p1.hp)}%`;
-      bar2.style.width = `${Math.max(0, p2.hp)}%`;
+    function calcAreaScore(arr) {
+      let blackStones = 0;
+      let whiteStones = 0;
+      let blackTerritory = 0;
+      let whiteTerritory = 0;
 
-      if (!winner) {
-        statusText.textContent = `玩家1: ${p1.hp} HP  |  玩家2: ${p2.hp} HP`;
+      const visited = new Set();
+
+      for (let y = 0; y < BOARD_SIZE; y++) {
+        for (let x = 0; x < BOARD_SIZE; x++) {
+          const v = arr[y][x];
+          if (v === 1) blackStones++;
+          if (v === 2) whiteStones++;
+
+          if (v !== 0) continue;
+          const key = `${x},${y}`;
+          if (visited.has(key)) continue;
+
+          const queue = [[x, y]];
+          const region = [];
+          const borderColors = new Set();
+          visited.add(key);
+
+          while (queue.length) {
+            const [cx, cy] = queue.pop();
+            region.push([cx, cy]);
+
+            for (const [nx, ny] of neighbors(cx, cy)) {
+              const nv = arr[ny][nx];
+              if (nv === 0) {
+                const nKey = `${nx},${ny}`;
+                if (!visited.has(nKey)) {
+                  visited.add(nKey);
+                  queue.push([nx, ny]);
+                }
+              } else {
+                borderColors.add(nv);
+              }
+            }
+          }
+
+          if (borderColors.size === 1) {
+            if (borderColors.has(1)) blackTerritory += region.length;
+            if (borderColors.has(2)) whiteTerritory += region.length;
+          }
+        }
+      }
+
+      const black = blackStones + blackTerritory;
+      const white = whiteStones + whiteTerritory + KOMI;
+      return { blackStones, whiteStones, blackTerritory, whiteTerritory, black, white };
+    }
+
+    function switchTurn() {
+      currentPlayer = currentPlayer === 1 ? 2 : 1;
+    }
+
+    function playerText(player) {
+      return player === 1 ? "黑棋" : "白棋";
+    }
+
+    function updateInfo() {
+      const score = calcAreaScore(board);
+      scoreBox.innerHTML = [
+        `黑：子 ${score.blackStones} + 地 ${score.blackTerritory} = <b>${score.black.toFixed(1)}</b>`,
+        `白：子 ${score.whiteStones} + 地 ${score.whiteTerritory} + 贴目 ${KOMI} = <b>${score.white.toFixed(1)}</b>`
+      ].join("<br>");
+
+      if (gameOver) {
+        const lead = Math.abs(score.black - score.white).toFixed(1);
+        const winner = score.black > score.white ? "黑棋" : "白棋";
+        statusEl.innerHTML = `<b>对局结束：</b>${winner} 胜 ${lead} 目。`;
+      } else {
+        statusEl.innerHTML = `<b>进行中：</b>轮到 ${playerText(currentPlayer)} 落子。`; 
       }
     }
 
-    function updatePlayer(player, opponent) {
-      if (winner) return;
-
-      if (keys.has(player.controls.left)) {
-        player.x -= player.speed;
-        player.facing = -1;
-      }
-      if (keys.has(player.controls.right)) {
-        player.x += player.speed;
-        player.facing = 1;
-      }
-
-      player.x = Math.max(20, Math.min(canvas.width - 20 - player.width, player.x));
-
-      if (keys.has(player.controls.attack)) {
-        hitTarget(player, opponent);
-      }
-
-      if (player.armSwing > 0) {
-        player.armSwing -= 2;
-      }
+    function log(msg) {
+      logEl.textContent = `${msg}\n${logEl.textContent}`.trim();
     }
 
-    function drawStickman(player) {
-      const x = player.x;
-      const y = player.y;
-      const headR = 13;
-      const torsoTop = y - player.height + 28;
-      const torsoBottom = y - 26;
-      const centerX = x + player.width / 2;
-      const attackPose = performance.now() < player.attackUntil;
+    function attemptPlace(x, y) {
+      if (gameOver) return;
+      if (!inBounds(x, y) || board[y][x] !== 0) return;
 
-      ctx.strokeStyle = player.color;
-      ctx.lineWidth = 5;
-      ctx.lineCap = "round";
+      const trial = cloneBoard(board);
+      trial[y][x] = currentPlayer;
+      const opponent = currentPlayer === 1 ? 2 : 1;
+      let captured = 0;
 
-      // Head
-      ctx.beginPath();
-      ctx.arc(centerX, torsoTop - 18, headR, 0, Math.PI * 2);
-      ctx.stroke();
-
-      // Body
-      ctx.beginPath();
-      ctx.moveTo(centerX, torsoTop);
-      ctx.lineTo(centerX, torsoBottom);
-      ctx.stroke();
-
-      // Arms
-      ctx.beginPath();
-      ctx.moveTo(centerX, torsoTop + 18);
-      ctx.lineTo(centerX - 24, torsoTop + 28);
-      ctx.moveTo(centerX, torsoTop + 18);
-      const armX = attackPose ? centerX + player.facing * 42 : centerX + 24;
-      const armY = attackPose ? torsoTop + 14 : torsoTop + 28;
-      ctx.lineTo(armX, armY);
-      ctx.stroke();
-
-      // Legs
-      ctx.beginPath();
-      ctx.moveTo(centerX, torsoBottom);
-      ctx.lineTo(centerX - 20, y);
-      ctx.moveTo(centerX, torsoBottom);
-      ctx.lineTo(centerX + 20, y);
-      ctx.stroke();
-    }
-
-    function drawGround() {
-      ctx.fillStyle = "#334155";
-      ctx.fillRect(0, 430, canvas.width, 110);
-      ctx.fillStyle = "rgba(255,255,255,0.08)";
-      for (let i = 0; i < canvas.width; i += 45) {
-        ctx.fillRect(i, 490, 24, 3);
+      for (const [nx, ny] of neighbors(x, y)) {
+        if (trial[ny][nx] !== opponent) continue;
+        const group = collectGroup(trial, nx, ny);
+        if (group.liberties === 0) {
+          for (const [gx, gy] of group.stones) {
+            trial[gy][gx] = 0;
+            captured++;
+          }
+        }
       }
-    }
 
-    function drawWinOverlay() {
-      if (!winner) return;
-
-      ctx.fillStyle = "rgba(15, 23, 42, 0.65)";
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-      ctx.fillStyle = "#f8fafc";
-      ctx.font = "bold 54px 'Segoe UI', sans-serif";
-      ctx.textAlign = "center";
-      ctx.fillText(`${winner.name} 胜利`, canvas.width / 2, canvas.height / 2 - 20);
-
-      ctx.font = "24px 'Segoe UI', sans-serif";
-      ctx.fillText("按 F5 刷新重新开始", canvas.width / 2, canvas.height / 2 + 26);
-    }
-
-    function loop() {
-      updatePlayer(p1, p2);
-      updatePlayer(p2, p1);
-
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      drawGround();
-      drawStickman(p1);
-      drawStickman(p2);
-      drawWinOverlay();
-
-      requestAnimationFrame(loop);
-    }
-
-    window.addEventListener("keydown", (e) => {
-      keys.add(e.code);
-      if (["ArrowUp", "ArrowLeft", "ArrowRight", "Space"].includes(e.code)) {
-        e.preventDefault();
+      const selfGroup = collectGroup(trial, x, y);
+      if (selfGroup.liberties === 0) {
+        log(`第 ${moveNumber} 手 ${playerText(currentPlayer)} ${posToText(x, y)}：非法（自杀棋）`);
+        return;
       }
+
+      const hash = boardHash(trial);
+      if (history.has(hash)) {
+        log(`第 ${moveNumber} 手 ${playerText(currentPlayer)} ${posToText(x, y)}：非法（重复局面）`);
+        return;
+      }
+
+      board = trial;
+      history.add(hash);
+      passCount = 0;
+
+      const capText = captured > 0 ? `，提子 ${captured}` : "";
+      log(`第 ${moveNumber} 手 ${playerText(currentPlayer)} 落在 ${posToText(x, y)}${capText}`);
+
+      moveNumber++;
+      switchTurn();
+      drawBoard();
+      updateInfo();
+    }
+
+    canvas.addEventListener("click", (e) => {
+      const rect = canvas.getBoundingClientRect();
+      const px = (e.clientX - rect.left) * (canvas.width / rect.width);
+      const py = (e.clientY - rect.top) * (canvas.height / rect.height);
+
+      const x = Math.round((px - pad) / grid);
+      const y = Math.round((py - pad) / grid);
+
+      const cx = pad + x * grid;
+      const cy = pad + y * grid;
+      if (Math.hypot(px - cx, py - cy) > grid * 0.45) return;
+
+      attemptPlace(x, y);
     });
 
-    window.addEventListener("keyup", (e) => {
-      keys.delete(e.code);
+    passBtn.addEventListener("click", () => {
+      if (gameOver) return;
+      log(`第 ${moveNumber} 手 ${playerText(currentPlayer)}：Pass`);
+      moveNumber++;
+      passCount++;
+      if (passCount >= 2) {
+        gameOver = true;
+      } else {
+        switchTurn();
+      }
+      updateInfo();
     });
 
-    updateBars();
-    loop();
+    restartBtn.addEventListener("click", () => {
+      board = Array.from({ length: BOARD_SIZE }, () => Array(BOARD_SIZE).fill(0));
+      currentPlayer = 1;
+      passCount = 0;
+      gameOver = false;
+      moveNumber = 1;
+      history.clear();
+      history.add(boardHash(board));
+      logEl.textContent = "新对局开始：黑棋先行";
+      drawBoard();
+      updateInfo();
+    });
+
+    history.add(boardHash(board));
+    drawBoard();
+    updateInfo();
+    log("新对局开始：黑棋先行");
   </script>
 </body>
 </html>
