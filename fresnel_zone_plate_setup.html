@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>菲涅尔波带片写入光路示意</title>
+  <style>
+    body { font-family: "Segoe UI", "PingFang SC", sans-serif; margin: 0; background:#0b1220; color:#e2e8f0; }
+    .wrap { max-width: 1100px; margin: 24px auto; padding: 0 16px; }
+    h1 { font-size: 26px; margin: 0 0 8px; }
+    .desc { color:#93c5fd; margin-bottom: 16px; }
+    .panel { display:grid; grid-template-columns: 320px 1fr; gap:16px; }
+    .controls { background:#111827; border:1px solid #334155; border-radius:12px; padding:14px; }
+    .ctrl { margin-bottom: 12px; }
+    label { display:flex; justify-content:space-between; font-size:14px; margin-bottom:4px; }
+    input[type='range']{ width:100%; }
+    .card { background:#020617; border:1px solid #334155; border-radius:12px; padding:8px; }
+    canvas { width:100%; height:auto; display:block; background:radial-gradient(circle at 50% 50%, #0f172a, #020617 70%); border-radius:10px; }
+    .legend{ margin-top:8px; font-size:13px; color:#cbd5e1; }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <h1>菲涅尔波带片（FZP）双光束干涉写入光路图</h1>
+  <div class="desc">参考光：准直后的平面波；物光：针孔后发散球面波。两束光在全息干板处干涉写入光栅。</div>
+
+  <div class="panel">
+    <div class="controls">
+      <div class="ctrl"><label>激光器→分光棱镜 <span id="d1v"></span></label><input id="d1" type="range" min="60" max="180" value="90"></div>
+      <div class="ctrl"><label>分光棱镜→针孔滤波组件 <span id="d2v"></span></label><input id="d2" type="range" min="80" max="230" value="130"></div>
+      <div class="ctrl"><label>针孔组件→全息干板（物光臂） <span id="d3v"></span></label><input id="d3" type="range" min="120" max="300" value="220"></div>
+      <div class="ctrl"><label>分光棱镜→准直透镜（参考光臂） <span id="d4v"></span></label><input id="d4" type="range" min="80" max="230" value="140"></div>
+      <div class="ctrl"><label>准直透镜→全息干板（参考光臂） <span id="d5v"></span></label><input id="d5" type="range" min="120" max="300" value="240"></div>
+      <div class="ctrl"><label>物光角度（相对光轴） <span id="angv"></span></label><input id="ang" type="range" min="-24" max="24" value="10"></div>
+      <p style="font-size:12px;color:#94a3b8;line-height:1.5;">针孔滤波组件：显微物镜 + 光学针孔（直径 25 μm）。可用于提升物光波前质量。</p>
+    </div>
+
+    <div class="card">
+      <canvas id="cv" width="760" height="460"></canvas>
+      <div class="legend">红色：激光主束；青色：参考光（平面波）；紫色：物光（球面波）；黄色竖线：全息干板（记录双光束干涉条纹）。</div>
+    </div>
+  </div>
+</div>
+
+<script>
+const ids = ["d1","d2","d3","d4","d5","ang"];
+const cv = document.getElementById("cv");
+const ctx = cv.getContext("2d");
+
+function label(id, unit="mm") { document.getElementById(id+"v").textContent = `${document.getElementById(id).value} ${unit}`; }
+function getV(id){ return Number(document.getElementById(id).value); }
+
+function drawComponent(x,y,name,color="#e2e8f0"){
+  ctx.fillStyle = color;
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 2;
+  ctx.fillRect(x-10,y-16,20,32);
+  ctx.font = "12px sans-serif";
+  ctx.fillText(name,x-44,y-24);
+}
+function line(x1,y1,x2,y2,color,w=2){ ctx.strokeStyle=color; ctx.lineWidth=w; ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke(); }
+function dashed(x1,y1,x2,y2,color){ ctx.setLineDash([6,6]); line(x1,y1,x2,y2,color,1.6); ctx.setLineDash([]); }
+
+function draw(){
+  ids.forEach(id => label(id, id==="ang"?"°":"mm"));
+  ctx.clearRect(0,0,cv.width,cv.height);
+
+  const y0=230, scale=1.55;
+  const d1=getV("d1")/scale, d2=getV("d2")/scale, d3=getV("d3")/scale, d4=getV("d4")/scale, d5=getV("d5")/scale;
+  const ang = getV("ang") * Math.PI/180;
+
+  const laser={x:55,y:y0};
+  const bs={x:laser.x+d1,y:y0};
+  const pin={x:bs.x+d2*Math.cos(ang), y:y0-d2*Math.sin(ang)};
+  const col={x:bs.x+d4, y:y0+110};
+  const plate={x:Math.max(pin.x+d3*Math.cos(ang), col.x+d5)+50, y:y0};
+
+  // components
+  drawComponent(laser.x,laser.y,"激光器","#f87171");
+  drawComponent(bs.x,bs.y,"分光棱镜","#cbd5e1");
+  drawComponent(pin.x,pin.y,"显微物镜+针孔\n(25μm)","#a78bfa");
+  drawComponent(col.x,col.y,"准直透镜","#67e8f9");
+
+  // holographic plate
+  ctx.strokeStyle="#fde047"; ctx.lineWidth=4;
+  ctx.beginPath(); ctx.moveTo(plate.x, 90); ctx.lineTo(plate.x, 370); ctx.stroke();
+  ctx.fillStyle="#fde047"; ctx.fillText("全息干板", plate.x-30, 80);
+
+  // laser to BS
+  line(laser.x+12,laser.y,bs.x-12,bs.y,"#ef4444",3);
+
+  // reference arm (plane wave)
+  line(bs.x+10,bs.y+8,col.x-12,col.y,"#22d3ee",2.8);
+  line(col.x+12,col.y,plate.x,col.y,"#22d3ee",3);
+  for(let y=col.y-25;y<=col.y+25;y+=10){ dashed(col.x+20,y,plate.x,y,"rgba(34,211,238,.5)"); }
+  ctx.fillStyle="#67e8f9"; ctx.fillText("参考光：平面波", col.x+35, col.y-14);
+
+  // object arm (spherical)
+  line(bs.x+5,bs.y-7,pin.x-12,pin.y,"#c084fc",2.8);
+  line(pin.x+10,pin.y,plate.x,pin.y+(plate.x-pin.x)*Math.tan(-ang),"#c084fc",3);
+  for(let r=35;r<=145;r+=22){
+    ctx.strokeStyle="rgba(192,132,252,.45)"; ctx.beginPath();
+    ctx.arc(pin.x,pin.y,r,-0.45,0.72); ctx.stroke();
+  }
+  ctx.fillStyle="#c4b5fd"; ctx.fillText("物光：球面波", pin.x+12, pin.y-18);
+
+  ctx.fillStyle="#e2e8f0";
+  ctx.fillText("双光束干涉写入光栅区", plate.x-80, y0+145);
+}
+
+ids.forEach(id => document.getElementById(id).addEventListener("input", draw));
+draw();
+</script>
+</body>
+</html>
